@@ -1,33 +1,16 @@
-#%%
+from sklearn.metrics import roc_curve,auc
 from sklearn.model_selection import StratifiedKFold as kfold
 from sklearn.datasets import make_classification
 from sklearn.linear_model import LogisticRegression
-import pandas as pd
 from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler
-import numpy as np
 from sklearn.svm import SVC
+
+import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 
-
-class ColumnExtractor:
-    def fit(self,X,y=None):
-        return self
-
-    def transform(self, X):
-        if isinstance(X,np.ndarray):
-            print("X is numpy array")
-            X_cols = X[:,self.columns]
-        elif isinstance(X,pd.DataFrame):
-            X_cols = X[self.columns]
-            print("X is pandas dataframe")
-        else:
-            raise("X should be numpy array or pandas dataframe")
-        return X_cols
-
-    def __init__(self,columns=None):
-        self.columns = columns
         
 def perform_grid_search(X,y):
     
@@ -50,34 +33,37 @@ def perform_grid_search(X,y):
     result.to_csv("roc_grid_result.csv",index=False,float_format='%3.2f')
     return grid
 
-def getData():
-    return make_classification(1000,10)
+def getData(rows=1000,cols=10):
+    return make_classification(rows,cols)
     
-from sklearn.metrics import roc_curve,auc
 
-def custom_fold(X,y,grid):
-    k = kfold(5)
-    for train_index, test_index in k.split(X, y):
-        y_train, y_test = y[train_index], y[test_index]
-        X_train, X_test = X[train_index], X[test_index]
-        grid.predict(X_test)
+
+def custom_fold(X, y, grid, create_plots=False):
+    k = kfold(5, shuffle=False)
+    fold = 0
+    roc_auc = []
+    for train_index, test_index in k.split(X, y):        
+        _, y_test = y[train_index], y[test_index]
+        _, X_test = X[train_index], X[test_index]
         scores = grid.predict_proba(X_test)
         
-        fpr, tpr, thresholds = roc_curve(y_test, scores[:,1], pos_label=1)
-        roc_auc = auc(fpr, tpr)
+        fpr, tpr = roc_curve(y_test, scores[:,1], pos_label=1)
+        roc_auc.append(auc(fpr, tpr))
 
-        # plt.plot(fpr,tpr,label=f"ROC curve (area = {roc_auc}).")
-        # plt.legend(loc="lower right")
+        if create_plots:
+            f,ax = plt.subplots(1,1)
+            ax.plot(fpr,tpr,label=f"ROC (area = {roc_auc}).")
+            ax.legend(loc="lower right")
+            f.savefig(f"fold_{fold:03d}.png")
+        fold+=1
 
-        # plt.waitforbuttonpress()
-        # plt.close()
-    return k
+    if create_plots: plt.show()
+    return roc_auc
 
 if __name__ == "__main__":
-    X, y = getData()
-
-    g = perform_grid_search(X,y)
-
-    k = custom_fold(X,y,g)
-
+    # Important to make sure your folds are generated the same way as in the grid as in the ROC generation
+    X, y = getData(100,10)
+    g = perform_grid_search(X, y)
+    auc = custom_fold(X, y, g, create_plots=False)
+    print(auc)
     print('done')
